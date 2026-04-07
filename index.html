@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<title>Cisco Multi Switch</title>
+
+<style>
+body {
+  background:#0b1a2a;
+  font-family: Arial;
+  color:#eee;
+  text-align:center;
+}
+
+.header { margin:15px; font-size:20px; }
+
+.controls { margin:10px; }
+
+.switch-box {
+  background:#1c2b3a;
+  padding:20px;
+  border-radius:10px;
+  width:950px;
+  margin:auto;
+  box-shadow:0 0 20px #000;
+}
+
+.ports {
+  display:grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap:5px;
+  margin-bottom:10px;
+}
+
+.port {
+  height:25px;
+  border-radius:3px;
+  cursor:pointer;
+  font-size:10px;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+
+.up { background:#00ff88; }
+.down { background:#444; }
+.trunk { background:#00bfff; }
+
+.sfp {
+  display:flex;
+  justify-content:center;
+  gap:10px;
+  margin-top:10px;
+}
+
+.sfp-port {
+  width:60px;
+  height:20px;
+  background:#999;
+  border-radius:3px;
+}
+
+.panel {
+  margin-top:15px;
+  background:#111;
+  padding:15px;
+  border-radius:10px;
+  display:inline-block;
+  text-align:left;
+}
+
+input, select { margin:5px; }
+button { margin:5px; cursor:pointer; }
+
+</style>
+</head>
+
+<body>
+
+<div class="header">Cisco Multi Switch Manager</div>
+
+<div class="controls">
+  <select id="switchSelect" onchange="loadSwitch()"></select>
+  <button onclick="addSwitch()">+ Add</button>
+  <button onclick="deleteSwitch()">Delete</button>
+</div>
+
+<div class="switch-box">
+  <div id="portsTop" class="ports"></div>
+  <div id="portsBottom" class="ports"></div>
+
+  <div class="sfp">
+    <div class="sfp-port"></div>
+    <div class="sfp-port"></div>
+    <div class="sfp-port"></div>
+    <div class="sfp-port"></div>
+  </div>
+</div>
+
+<div id="popup" class="panel">คลิกพอร์ตเพื่อดูข้อมูล</div>
+
+<div class="panel">
+<h3>Edit Port</h3>
+<input id="editId" placeholder="Port ID">
+<input id="editVlan" placeholder="VLAN">
+<select id="editStatus">
+  <option value="up">Up</option>
+  <option value="down">Down</option>
+</select>
+<select id="editType">
+  <option value="access">Access</option>
+  <option value="trunk">Trunk</option>
+</select>
+<input id="editDesc" placeholder="Description">
+<button onclick="updatePort()">Update</button>
+</div>
+
+<script>
+
+let switches = JSON.parse(localStorage.getItem("switches")) || [];
+let currentIndex = 0;
+
+// ===== INIT =====
+function init() {
+  if (switches.length === 0) {
+    createSwitch("SW-01", 48);
+  }
+  renderSwitchList();
+  loadSwitch();
+}
+
+// ===== CREATE SWITCH =====
+function createSwitch(name, portCount) {
+  let ports = [];
+
+  for (let i = 1; i <= portCount; i++) {
+    ports.push({
+      id: i,
+      vlan: "-",
+      status: "down",
+      type: "access",
+      desc: ""
+    });
+  }
+
+  switches.push({ name, ports });
+  save();
+}
+
+// ===== SAVE =====
+function save() {
+  localStorage.setItem("switches", JSON.stringify(switches));
+}
+
+// ===== SWITCH LIST =====
+function renderSwitchList() {
+  const sel = document.getElementById("switchSelect");
+  sel.innerHTML = "";
+
+  switches.forEach((sw, i) => {
+    const opt = document.createElement("option");
+    opt.value = i;
+    opt.text = sw.name;
+    sel.appendChild(opt);
+  });
+
+  sel.value = currentIndex;
+}
+
+// ===== LOAD SWITCH =====
+function loadSwitch() {
+  currentIndex = document.getElementById("switchSelect").value;
+  renderPorts();
+}
+
+// ===== RENDER =====
+function renderPorts() {
+  const top = document.getElementById("portsTop");
+  const bottom = document.getElementById("portsBottom");
+
+  top.innerHTML = "";
+  bottom.innerHTML = "";
+
+  const ports = switches[currentIndex].ports;
+  const half = ports.length / 2;
+
+  ports.forEach(p => {
+    const div = document.createElement("div");
+    div.className = "port " + getColor(p);
+    div.innerText = p.id;
+
+    div.onclick = () => showPort(p.id);
+
+    if (p.id <= half) top.appendChild(div);
+    else bottom.appendChild(div);
+  });
+}
+
+// ===== COLOR =====
+function getColor(p) {
+  if (p.status === "down") return "down";
+  if (p.type === "trunk") return "trunk";
+  return "up";
+}
+
+// ===== SHOW =====
+function showPort(id) {
+  const p = switches[currentIndex].ports.find(x => x.id === id);
+
+  document.getElementById("popup").innerHTML = `
+    <b>Port ${p.id}</b><br>
+    VLAN: ${p.vlan}<br>
+    Status: ${p.status}<br>
+    Type: ${p.type}<br>
+    Desc: ${p.desc || "-"}
+  `;
+
+  document.getElementById("editId").value = p.id;
+  document.getElementById("editVlan").value = p.vlan;
+  document.getElementById("editStatus").value = p.status;
+  document.getElementById("editType").value = p.type;
+  document.getElementById("editDesc").value = p.desc;
+}
+
+// ===== UPDATE =====
+function updatePort() {
+  const id = parseInt(document.getElementById("editId").value);
+  const p = switches[currentIndex].ports.find(x => x.id === id);
+
+  if (!p) return alert("ไม่เจอพอร์ต");
+
+  p.vlan = document.getElementById("editVlan").value;
+  p.status = document.getElementById("editStatus").value;
+  p.type = document.getElementById("editType").value;
+  p.desc = document.getElementById("editDesc").value;
+
+  save();
+  renderPorts();
+}
+
+// ===== ADD =====
+function addSwitch() {
+  const name = prompt("ชื่อ Switch:");
+  const ports = prompt("จำนวน Port (24 หรือ 48):");
+
+  if (!name || !ports) return;
+
+  createSwitch(name, parseInt(ports));
+  currentIndex = switches.length - 1;
+
+  renderSwitchList();
+  renderPorts();
+}
+
+// ===== DELETE =====
+function deleteSwitch() {
+  if (!confirm("ลบ switch นี้?")) return;
+
+  switches.splice(currentIndex, 1);
+  currentIndex = 0;
+
+  save();
+  renderSwitchList();
+  loadSwitch();
+}
+
+init();
+
+</script>
+
+</body>
+</html>
